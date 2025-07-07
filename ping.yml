@@ -1,0 +1,6 @@
+- name: Test EC2 Connectivity
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Ping the EC2 instance
+      ping:
