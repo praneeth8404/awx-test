@@ -1,6 +1,9 @@
-- name: Test EC2 Connectivity
-  hosts: all
-  gather_facts: no
+---
+- hosts: all
+  become: true  # Optional: needed if creating file in a privileged path
   tasks:
-    - name: Ping the EC2 instance
-      ping:
+    - name: Creating an empty file
+      ansible.builtin.file:
+        path: /tmp/myfile.txt  # Replace with your desired path
+        state: touch
+        mode: '0644'  # Optional: file permission
