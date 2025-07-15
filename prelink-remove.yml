@@ -1,0 +1,23 @@
+  tasks:
+    - name: Check if prelink is installed
+      ansible.builtin.stat:
+        path: /usr/sbin/prelink
+        get_checksum: false
+      register: prelink
+      tags:
+        - prelink
+        
+    - name: Undo prelinking (restore original binaries)
+      ansible.builtin.command:
+        cmd: prelink -ua
+      when: prelink.stat.exists
+      changed_when: true
+      tags:
+        - prelink
+        
+    - name: Remove prelink package
+      ansible.builtin.package:
+        name: prelink
+        state: absent
+      tags:
+        - prelink
