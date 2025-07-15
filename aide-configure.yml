@@ -1,0 +1,127 @@
+---
+- name: AIDE Hardening Playbook - Cleaned and CIS Compliant
+  hosts: all
+  become: yes
+  vars:
+    aide_conf: /etc/aide/aide.conf
+    aide_db_path: file:/var/lib/aide/aide.db
+    aide_db_out_path: file:/var/lib/aide/aide.db.new
+
+  tasks:
+
+    - name: Gather the package facts
+      package_facts:
+        manager: auto
+      tags:
+        - package_aide_installed
+
+    - name: Ensure aide is installed
+      package:
+        name: aide
+        state: present
+      when: '"linux-base" in ansible_facts.packages'
+      tags:
+        - package_aide_installed
+
+    - name: Check if DB Path in aide.conf is already set
+      lineinfile:
+        path: "{{ aide_conf }}"
+        regexp: ^#?(\s*)(database=)(.*)$
+        state: absent
+      check_mode: true
+      changed_when: false
+      register: database_replace
+      when: '"linux-base" in ansible_facts.packages'
+      tags:
+        - aide_build_database
+
+    - name: Check if DB Out Path in aide.conf is already set
+      lineinfile:
+        path: "{{ aide_conf }}"
+        regexp: ^#?(\s*)(database_out=)(.*)$
+        state: absent
+      check_mode: true
+      changed_when: false
+      register: database_out_replace
+      when: '"linux-base" in ansible_facts.packages'
+      tags:
+        - aide_build_database
+
+    - name: Fix DB Path in Config File if Necessary
+      lineinfile:
+        path: "{{ aide_conf }}"
+        regexp: ^#?(\s*)(database)(\s*)=(\s*)(.*)$
+        line: \2\3=\4{{ aide_db_path }}
+        backrefs: true
+      when:
+        - '"linux-base" in ansible_facts.packages'
+        - database_replace.found > 0
+      tags:
+        - aide_build_database
+
+    - name: Fix DB Out Path in Config File if Necessary
+      lineinfile:
+        path: "{{ aide_conf }}"
+        regexp: ^#?(\s*)(database_out)(\s*)=(\s*)(.*)$
+        line: \2\3=\4{{ aide_db_out_path }}
+        backrefs: true
+      when:
+        - '"linux-base" in ansible_facts.packages'
+        - database_out_replace.found > 0
+      tags:
+        - aide_build_database
+
+    - name: Ensure the Default DB Path is Added
+      lineinfile:
+        path: "{{ aide_conf }}"
+        line: "database={{ aide_db_path }}"
+        create: true
+      when:
+        - '"linux-base" in ansible_facts.packages'
+        - database_replace.found == 0
+      tags:
+        - aide_build_database
+
+    - name: Ensure the Default Out Path is Added
+      lineinfile:
+        path: "{{ aide_conf }}"
+        line: "database_out={{ aide_db_out_path }}"
+        create: true
+      when:
+        - '"linux-base" in ansible_facts.packages'
+        - database_out_replace.found == 0
+      tags:
+        - aide_build_database
+
+    - name: Build and Test AIDE Database
+      command: /usr/sbin/aideinit -y -f
+      when: '"linux-base" in ansible_facts.packages'
+      tags:
+        - aide_build_database
+
+    - name: Enable dailyaidecheck.service
+      systemd:
+        name: dailyaidecheck.service
+        enabled: true
+        daemon_reload: true
+        masked: false
+      when:
+        - '"linux-base" in ansible_facts.packages'
+        - "'aide' in ansible_facts.packages"
+        - "'systemd' in ansible_facts.packages"
+      tags:
+        - aide_periodic_checking_systemd_timer
+
+    - name: Enable dailyaidecheck.timer
+      systemd:
+        name: dailyaidecheck.timer
+        state: started
+        enabled: true
+        daemon_reload: true
+        masked: false
+      when:
+        - '"linux-base" in ansible_facts.packages'
+        - "'aide' in ansible_facts.packages"
+        - "'systemd' in ansible_facts.packages"
+      tags:
+        - aide_periodic_checking_systemd_timer
